@@ -24,13 +24,17 @@ module.exports = {
     path: process.env.YTDLP_PATH || undefined,
     // Default options for yt-dlp
     defaultOptions: {
-      format: "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-      mergeOutputFormat: "mp4",
+      // Use format that doesn't require merging if ffmpeg is not available
+      format: "best[ext=mp4]/best",
       restrictFilenames: true,
       noPlaylist: true,
       noCheckCertificates: false,
       preferFreeFormats: false,
-      youtubeSkipDashManifest: false,
+      // Add options to work around YouTube 403 errors
+      extractorArgs: "youtube:player_client=android,web",
+      // Add user agent to avoid blocking
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     },
   },
 

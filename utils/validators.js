@@ -76,7 +76,7 @@ const validateJobId = [
     .trim()
     .notEmpty()
     .withMessage("Job ID is required")
-    .isUUID()
+    .isNumeric()
     .withMessage("Invalid job ID format"),
 ];
 

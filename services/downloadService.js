@@ -15,7 +15,7 @@ class DownloadService {
   constructor() {
     this.ytDlpPath = config.ytdlp.path;
     this.ytDlp = null;
-    this.initYtDlp();
+    this.initPromise = this.initYtDlp();
   }
 
   /**
@@ -36,8 +36,18 @@ class DownloadService {
     } catch (error) {
       logger.error("Failed to initialize yt-dlp:", error);
       throw new Error(
-        "yt-dlp initialization failed. Please ensure yt-dlp is installed."
+        "yt-dlp initialization failed. Please ensure yt-dlp is installed.",
       );
+    }
+  }
+
+  /**
+   * Ensure yt-dlp is initialized before use
+   */
+  async ensureInitialized() {
+    await this.initPromise;
+    if (!this.ytDlp) {
+      throw new Error("yt-dlp is not initialized");
     }
   }
 
@@ -46,6 +56,7 @@ class DownloadService {
    */
   async getVersion() {
     try {
+      await this.ensureInitialized();
       return await this.ytDlp.getVersion();
     } catch (error) {
       logger.error("Failed to get yt-dlp version:", error);
@@ -60,6 +71,7 @@ class DownloadService {
    */
   async getVideoInfo(url) {
     try {
+      await this.ensureInitialized();
       const info = await this.ytDlp.getVideoInfo(url);
       return {
         title: info.title,
@@ -88,7 +100,7 @@ class DownloadService {
   buildDownloadOptions(params) {
     const { format, quality, url } = params;
     const platform = detectPlatform(url);
-    const options = [...config.ytdlp.defaultOptions];
+    const options = { ...config.ytdlp.defaultOptions };
 
     // Format selection
     if (format && format !== "best") {
@@ -131,7 +143,7 @@ class DownloadService {
     const platform = detectPlatform(url);
 
     logger.info(
-      `Starting download for ${platform} video: ${url} (Job: ${jobId})`
+      `Starting download for ${platform} video: ${url} (Job: ${jobId})`,
     );
 
     try {
@@ -146,67 +158,73 @@ class DownloadService {
 
       const outputTemplate = path.join(
         config.download.dir,
-        `${jobId}_${safeTitle}.%(ext)s`
+        `${jobId}_${safeTitle}.%(ext)s`,
       );
 
       // Build download options
       const options = this.buildDownloadOptions(params);
       options.output = outputTemplate;
 
-      // Start download
-      const ytDlpProcess = this.ytDlp.exec([
-        url,
-        ...this.optionsToArgs(options),
-      ]);
+      // Convert options to arguments
+      const args = this.optionsToArgs(options);
+
+      // Start download using exec which returns a YTDlpEventEmitter
+      const ytDlpEmitter = this.ytDlp.exec([url, ...args]);
+
+      if (!ytDlpEmitter) {
+        throw new Error("Failed to start yt-dlp process");
+      }
 
       let downloadedFile = null;
+      let errorMessages = [];
 
-      // Handle progress updates
-      ytDlpProcess.stdout.on("data", (data) => {
-        const output = data.toString();
-
-        // Parse progress from yt-dlp output
-        const progressMatch = output.match(/(\d+\.?\d*)%/);
-        if (progressMatch && progressCallback) {
-          const progress = parseFloat(progressMatch[1]);
-          progressCallback({
-            jobId,
-            progress,
-            status: "downloading",
-            message: output.trim(),
-          });
-        }
-
-        // Capture the output filename
-        const mergeMatch = output.match(
-          /\[Merger\] Merging formats into "(.+)"/
-        );
-        const destMatch = output.match(/\[download\] Destination: (.+)/);
-
-        if (mergeMatch) {
-          downloadedFile = mergeMatch[1];
-        } else if (destMatch && !downloadedFile) {
-          downloadedFile = destMatch[1];
-        }
-
-        logger.debug(`yt-dlp output: ${output.trim()}`);
-      });
-
-      ytDlpProcess.stderr.on("data", (data) => {
-        logger.warn(`yt-dlp stderr: ${data.toString()}`);
-      });
-
-      // Wait for download to complete
+      // Wait for download to complete using the event emitter
       await new Promise((resolve, reject) => {
-        ytDlpProcess.on("exit", (code) => {
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(`yt-dlp exited with code ${code}`));
+        // Handle progress events
+        ytDlpEmitter.on("progress", (progress) => {
+          if (progressCallback) {
+            progressCallback({
+              jobId,
+              progress: progress.percent || 0,
+              status: "downloading",
+              message: `${progress.percent}% - ${progress.currentSpeed || "N/A"} - ETA: ${progress.eta || "N/A"}`,
+            });
           }
         });
 
-        ytDlpProcess.on("error", (error) => {
+        // Handle yt-dlp events (for capturing output filename)
+        ytDlpEmitter.on("ytDlpEvent", (eventType, eventData) => {
+          logger.debug(`yt-dlp event [${eventType}]: ${eventData}`);
+
+          // Try to capture the output filename from various events
+          const mergeMatch = eventData.match(
+            /\[Merger\] Merging formats into "(.+)"/,
+          );
+          const destMatch = eventData.match(/\[download\] Destination: (.+)/);
+
+          if (mergeMatch) {
+            downloadedFile = mergeMatch[1];
+          } else if (destMatch && !downloadedFile) {
+            downloadedFile = destMatch[1];
+          }
+        });
+
+        // Handle close event (process exit)
+        ytDlpEmitter.on("close", (exitCode) => {
+          if (exitCode === 0) {
+            resolve();
+          } else {
+            const errorMsg =
+              errorMessages.length > 0
+                ? errorMessages.join("\n")
+                : `yt-dlp exited with code ${exitCode}`;
+            reject(new Error(errorMsg));
+          }
+        });
+
+        // Handle error events
+        ytDlpEmitter.on("error", (error) => {
+          errorMessages.push(error.message);
           reject(error);
         });
       });
@@ -227,7 +245,7 @@ class DownloadService {
       const fileStats = fs.statSync(downloadedFile);
 
       logger.info(
-        `Download completed: ${downloadedFile} (${fileStats.size} bytes)`
+        `Download completed: ${downloadedFile} (${fileStats.size} bytes)`,
       );
 
       return {

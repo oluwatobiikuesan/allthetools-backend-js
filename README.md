@@ -37,37 +37,32 @@ A robust backend service for downloading videos from YouTube, TikTok, and Twitch
    npm install
    ```
 
-3. **Install yt-dlp**
+3. **Install yt-dlp and ffmpeg**
 
-   Option A: Use the installation script
+   Option A: Use the automated installation script (recommended)
 
    ```bash
+   npm run setup
+   # or
    npm run install-ytdlp
    ```
+
+   This will automatically install both yt-dlp and ffmpeg for your platform.
 
    Option B: Install manually
 
    ```bash
    # macOS
-   brew install yt-dlp
+   brew install yt-dlp ffmpeg
 
-   # Linux
+   # Linux (Ubuntu/Debian)
+   sudo apt install ffmpeg
    pip3 install yt-dlp
 
-   # Or download binary from https://github.com/yt-dlp/yt-dlp/releases
+   # Or download yt-dlp binary from https://github.com/yt-dlp/yt-dlp/releases
    ```
 
-4. **Install ffmpeg**
-
-   ```bash
-   # macOS
-   brew install ffmpeg
-
-   # Ubuntu/Debian
-   sudo apt install ffmpeg
-   ```
-
-5. **Start Redis**
+4. **Start Redis**
 
    ```bash
    # Using Docker
@@ -77,14 +72,14 @@ A robust backend service for downloading videos from YouTube, TikTok, and Twitch
    brew services start redis
    ```
 
-6. **Configure environment**
+5. **Configure environment**
 
    ```bash
    cp .env.example .env
    # Edit .env with your settings
    ```
 
-7. **Start the server**
+6. **Start the server**
    ```bash
    npm start
    # Or for development with auto-reload
@@ -317,7 +312,7 @@ const jobId = data.jobId;
 // Poll for status
 const checkStatus = async () => {
   const statusResponse = await fetch(
-    `http://localhost:3000/api/download/${jobId}`
+    `http://localhost:3000/api/download/${jobId}`,
   );
   const { data: status } = await statusResponse.json();
 
