@@ -25,6 +25,16 @@ function detectPlatform(url) {
       return "twitch";
     }
 
+    // Instagram
+    if (hostname.includes("instagram.com")) {
+      return "instagram";
+    }
+
+    // Twitter/X
+    if (hostname.includes("twitter.com") || hostname.includes("x.com")) {
+      return "twitter";
+    }
+
     return null;
   } catch (error) {
     return null;
@@ -52,7 +62,9 @@ const validateDownloadRequest = [
     .withMessage("Invalid URL format")
     .custom((value) => {
       if (!isSupportedPlatform(value)) {
-        throw new Error("URL must be from YouTube, TikTok, or Twitch");
+        throw new Error(
+          "URL must be from YouTube, TikTok, Twitch, Instagram, or Twitter",
+        );
       }
       return true;
     }),
@@ -64,7 +76,7 @@ const validateDownloadRequest = [
     .optional()
     .isIn(["best", "worst", "720p", "1080p", "1440p", "2160p"])
     .withMessage(
-      "Invalid quality. Allowed: best, worst, 720p, 1080p, 1440p, 2160p"
+      "Invalid quality. Allowed: best, worst, 720p, 1080p, 1440p, 2160p",
     ),
 ];
 

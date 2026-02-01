@@ -126,6 +126,12 @@ class DownloadService {
     } else if (platform === "twitch") {
       // Twitch-specific options
       options.format = "best";
+    } else if (platform === "instagram") {
+      // Instagram-specific options
+      options.noCheckCertificates = true;
+    } else if (platform === "twitter") {
+      // Twitter-specific options
+      options.noCheckCertificates = true;
     }
 
     return options;

@@ -5,6 +5,9 @@ const logger = require("./utils/logger");
 
 // Import routes
 const downloadRoutes = require("./routes/download");
+const convertRoutes = require("./routes/convert");
+const convertUrlRoutes = require("./routes/convert-url");
+const enhanceRoutes = require("./routes/enhance");
 const healthRoutes = require("./routes/health");
 
 const app = express();
@@ -26,6 +29,9 @@ app.use((req, res, next) => {
 // Routes
 app.use("/api/health", healthRoutes);
 app.use("/api/download", downloadRoutes);
+app.use("/api/convert", convertRoutes);
+app.use("/api/convert-url", convertUrlRoutes);
+app.use("/api/enhance", enhanceRoutes);
 
 // Root endpoint
 app.get("/", (req, res) => {
@@ -33,7 +39,7 @@ app.get("/", (req, res) => {
     name: "Video Downloader Service",
     version: "1.0.0",
     description:
-      "Backend service for downloading videos from YouTube, TikTok, and Twitch",
+      "Backend service for downloading videos from YouTube, TikTok, Twitch, Instagram, and Twitter",
     endpoints: {
       health: "/api/health",
       download: {
@@ -44,8 +50,15 @@ app.get("/", (req, res) => {
         info: "GET /api/download/info/video?url=<video_url>",
         stats: "GET /api/download/stats/queue",
       },
+      convert: {
+        submit: "POST /api/convert (multipart/form-data)",
+        status: "GET /api/convert/:jobId",
+        file: "GET /api/convert/:jobId/file",
+        cancel: "DELETE /api/convert/:jobId",
+      },
     },
-    supportedPlatforms: ["YouTube", "TikTok", "Twitch"],
+    supportedPlatforms: ["YouTube", "TikTok", "Twitch", "Instagram", "Twitter"],
+    supportedFormats: ["mp3", "wav", "aac", "flac", "ogg"],
   });
 });
 
