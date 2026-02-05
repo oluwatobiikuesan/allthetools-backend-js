@@ -6,8 +6,14 @@ RUN apk add --no-cache \
     py3-pip \
     ffmpeg
 
-# Install yt-dlp
-RUN pip3 install --no-cache-dir yt-dlp
+# Install yt-dlp using pip and ensure it's accessible
+RUN python3 -m pip install --break-system-packages --no-cache-dir yt-dlp && \
+    YTDLP_LOCATION=$(which yt-dlp) && \
+    echo "yt-dlp installed at: $YTDLP_LOCATION" && \
+    if [ "$YTDLP_LOCATION" != "/usr/local/bin/yt-dlp" ]; then \
+      ln -sf "$YTDLP_LOCATION" /usr/local/bin/yt-dlp; \
+    fi && \
+    yt-dlp --version
 
 # Create app directory
 WORKDIR /app
@@ -21,11 +27,12 @@ RUN npm ci --only=production
 # Copy app source
 COPY . .
 
-# Create directories
-RUN mkdir -p downloads logs
+# Create directories with proper permissions
+RUN mkdir -p downloads logs bin cookies && chmod -R 755 bin
+COPY ./cookies/youtube.txt ./cookies/youtube.txt
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3005
 
-# Start the application
+# Start the application (yt-dlp already installed via pip)
 CMD ["node", "server.js"]

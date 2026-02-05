@@ -21,11 +21,14 @@ module.exports = {
   },
 
   ytdlp: {
-    path: process.env.YTDLP_PATH || undefined,
+    // Treat empty string as undefined to allow auto-detection
+    path:
+      process.env.YTDLP_PATH && process.env.YTDLP_PATH.trim() !== ""
+        ? process.env.YTDLP_PATH
+        : undefined,
     // Default options for yt-dlp
     defaultOptions: {
-      // Use format that doesn't require merging if ffmpeg is not available
-      format: "best[ext=mp4]/best",
+      // Let yt-dlp choose the best format automatically
       restrictFilenames: true,
       noPlaylist: true,
       noCheckCertificates: false,
@@ -36,6 +39,10 @@ module.exports = {
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     },
+    // Path to global cookies file for YouTube authentication
+    cookiesPath: path.resolve(
+      process.env.YOUTUBE_COOKIES_PATH || "./cookies/youtube.txt",
+    ),
   },
 
   logging: {

@@ -50,7 +50,7 @@ router.post(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -86,7 +86,7 @@ router.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -150,7 +150,7 @@ router.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -208,7 +208,7 @@ router.delete(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 /**

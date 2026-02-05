@@ -38,7 +38,7 @@ downloadQueue.process(config.download.maxConcurrent, async (job) => {
           ...job.data,
           progressMessage: progressData.message,
         });
-      }
+      },
     );
 
     // Mark as complete
@@ -97,7 +97,7 @@ async function addDownloadJob(params) {
         },
         removeOnComplete: false,
         removeOnFail: false,
-      }
+      },
     );
 
     logger.info(`Added download job ${job.id} to queue`);

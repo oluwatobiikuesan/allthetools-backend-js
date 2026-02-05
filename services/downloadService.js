@@ -11,6 +11,12 @@ if (!fs.existsSync(config.download.dir)) {
   fs.mkdirSync(config.download.dir, { recursive: true });
 }
 
+// Ensure cookies directory exists
+const cookiesDir = path.dirname(config.ytdlp.cookiesPath);
+if (!fs.existsSync(cookiesDir)) {
+  fs.mkdirSync(cookiesDir, { recursive: true });
+}
+
 class DownloadService {
   constructor() {
     this.ytDlpPath = config.ytdlp.path;
@@ -72,7 +78,29 @@ class DownloadService {
   async getVideoInfo(url) {
     try {
       await this.ensureInitialized();
-      const info = await this.ytDlp.getVideoInfo(url);
+
+      const platform = detectPlatform(url);
+      const args = [];
+
+      // Use cookies for YouTube if the file exists
+      if (platform === "youtube" && fs.existsSync(config.ytdlp.cookiesPath)) {
+        args.push("--cookies", config.ytdlp.cookiesPath);
+
+        // Anti-bot arguments from config
+        if (config.ytdlp.defaultOptions.extractorArgs) {
+          args.push(
+            "--extractor-args",
+            config.ytdlp.defaultOptions.extractorArgs,
+          );
+        }
+        if (config.ytdlp.defaultOptions.userAgent) {
+          args.push("--user-agent", config.ytdlp.defaultOptions.userAgent);
+        }
+      }
+
+      logger.debug(`getVideoInfo args for ${url}: ${JSON.stringify(args)}`);
+
+      const info = await this.ytDlp.getVideoInfo([url, ...args]);
       return {
         title: info.title,
         duration: info.duration,
@@ -102,25 +130,34 @@ class DownloadService {
     const platform = detectPlatform(url);
     const options = { ...config.ytdlp.defaultOptions };
 
-    // Format selection
-    if (format && format !== "best") {
-      options.format = `bestvideo[ext=${format}]+bestaudio/best[ext=${format}]/best`;
-      options.mergeOutputFormat = format;
-    }
+    // Skip format/quality selection for YouTube - let yt-dlp handle it
+    if (platform !== "youtube") {
+      // Format selection
+      if (format && format !== "best") {
+        options.format = `bestvideo[ext=${format}]+bestaudio/best[ext=${format}]/best`;
+        options.mergeOutputFormat = format;
+      }
 
-    // Quality selection
-    if (quality && quality !== "best") {
-      if (quality === "worst") {
-        options.format = "worst";
-      } else {
-        // Extract height from quality (e.g., '1080p' -> '1080')
-        const height = quality.replace("p", "");
-        options.format = `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`;
+      // Quality selection
+      if (quality && quality !== "best") {
+        if (quality === "worst") {
+          options.format = "worst";
+        } else {
+          // Extract height from quality (e.g., '1080p' -> '1080')
+          const height = quality.replace("p", "");
+          options.format = `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`;
+        }
       }
     }
 
     // Platform-specific options
-    if (platform === "tiktok") {
+    if (platform === "youtube") {
+      // Add cookies for YouTube if the file exists
+      if (fs.existsSync(config.ytdlp.cookiesPath)) {
+        options.cookies = config.ytdlp.cookiesPath;
+        logger.debug(`Using cookies for YouTube: ${config.ytdlp.cookiesPath}`);
+      }
+    } else if (platform === "tiktok") {
       // TikTok-specific options
       options.noCheckCertificates = true;
     } else if (platform === "twitch") {

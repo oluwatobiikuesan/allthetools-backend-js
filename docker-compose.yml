@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   redis:
@@ -15,15 +15,21 @@ services:
     build: .
     container_name: video-downloader-app
     ports:
-      - "3000:3000"
+      - "3005:3005"
     environment:
       - NODE_ENV=production
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DOWNLOAD_DIR=/app/downloads
+      - YTDLP_PATH=/usr/local/bin/yt-dlp
+      - YOUTUBE_COOKIES_PATH=/app/cookies/youtube.txt
     volumes:
       - ./downloads:/app/downloads
       - ./logs:/app/logs
+      - ./cookies:/app/cookies
+      # Exclude node_modules and bin to prevent conflicts
+      - /app/node_modules
+      - /app/bin
     depends_on:
       - redis
     restart: unless-stopped
