@@ -2,6 +2,9 @@ const Queue = require("bull");
 const config = require("../config/config");
 const logger = require("../utils/logger");
 const downloadService = require("./downloadService");
+const telemetryService = require("./telemetryService");
+
+const JOB_TOOL_NAME = "video_downloader";
 
 // Create download queue
 const downloadQueue = new Queue("video-downloads", {
@@ -23,17 +26,12 @@ downloadQueue.process(config.download.maxConcurrent, async (job) => {
   logger.info(`Processing download job ${job.id} for URL: ${url}`);
 
   try {
-    // Update job progress
     await job.progress(0);
 
-    // Download video with progress callback
     const result = await downloadService.downloadVideo(
       { url, format, quality },
       async (progressData) => {
-        // Update job progress
         await job.progress(progressData.progress);
-
-        // Update job data with progress info
         await job.update({
           ...job.data,
           progressMessage: progressData.message,
@@ -41,7 +39,6 @@ downloadQueue.process(config.download.maxConcurrent, async (job) => {
       }
     );
 
-    // Mark as complete
     await job.progress(100);
 
     logger.info(`Download job ${job.id} completed successfully`);
@@ -54,15 +51,122 @@ downloadQueue.process(config.download.maxConcurrent, async (job) => {
 });
 
 // Queue event handlers
-downloadQueue.on("completed", (job, result) => {
+downloadQueue.on("active", async (job) => {
+  try {
+    const startedAt = new Date();
+    const submittedAt = job.data.timestamp
+      ? new Date(job.data.timestamp)
+      : null;
+    const queueWaitMs =
+      submittedAt && job.processedOn
+        ? job.processedOn - submittedAt.getTime()
+        : submittedAt
+        ? startedAt.getTime() - submittedAt.getTime()
+        : null;
+
+    await telemetryService.upsertJob({
+      job_id: job.id,
+      tool: job.data.tool || JOB_TOOL_NAME,
+      platform: job.data.platform,
+      status: "active",
+      format: job.data.format,
+      quality: job.data.quality,
+      submitted_at: job.data.timestamp,
+      started_at: new Date(job.processedOn || startedAt).toISOString(),
+      queue_wait_ms: queueWaitMs,
+    });
+  } catch (error) {
+    logger.warn(`[telemetry] failed to log active job ${job.id}`, error);
+  }
+});
+
+downloadQueue.on("completed", async (job, result) => {
   logger.info(`Job ${job.id} completed with result:`, {
     filename: result.filename,
     filesize: result.filesize,
   });
+
+  try {
+    const completedAt = job.finishedOn
+      ? new Date(job.finishedOn)
+      : new Date();
+    const processedOn = job.processedOn
+      ? new Date(job.processedOn)
+      : completedAt;
+    const submittedAt = job.data.timestamp
+      ? new Date(job.data.timestamp)
+      : null;
+
+    const queueWaitMs =
+      submittedAt && job.processedOn
+        ? job.processedOn - submittedAt.getTime()
+        : null;
+    const processingMs = job.finishedOn && job.processedOn
+      ? job.finishedOn - job.processedOn
+      : completedAt.getTime() - processedOn.getTime();
+
+    await telemetryService.upsertJob({
+      job_id: job.id,
+      tool: job.data.tool || JOB_TOOL_NAME,
+      platform: job.data.platform,
+      status: "completed",
+      format: job.data.format,
+      quality: job.data.quality,
+      submitted_at: job.data.timestamp,
+      started_at: processedOn.toISOString(),
+      completed_at: completedAt.toISOString(),
+      queue_wait_ms: queueWaitMs,
+      processing_ms: processingMs,
+      filesize_bytes: result?.filesize,
+      result_filename: result?.filename,
+      video_duration_seconds: result?.videoInfo?.duration,
+    });
+
+    const costs = telemetryService.calculateCosts({
+      filesizeBytes: result?.filesize || 0,
+      processingMs,
+      retentionHours: config.download.retentionHours,
+    });
+
+    await telemetryService.insertCost({
+      job_id: job.id,
+      tool: job.data.tool || JOB_TOOL_NAME,
+      currency: "USD",
+      recorded_at: completedAt.toISOString(),
+      ...costs,
+    });
+  } catch (error) {
+    logger.warn(`[telemetry] failed to log completion for job ${job.id}`, error);
+  }
 });
 
-downloadQueue.on("failed", (job, error) => {
+downloadQueue.on("failed", async (job, error) => {
   logger.error(`Job ${job.id} failed:`, error.message);
+
+  try {
+    const finishedAt = job.finishedOn
+      ? new Date(job.finishedOn)
+      : new Date();
+    await telemetryService.upsertJob({
+      job_id: job.id,
+      tool: job.data.tool || JOB_TOOL_NAME,
+      platform: job.data.platform,
+      status: "failed",
+      format: job.data.format,
+      quality: job.data.quality,
+      submitted_at: job.data.timestamp,
+      started_at: job.processedOn
+        ? new Date(job.processedOn).toISOString()
+        : null,
+      completed_at: finishedAt.toISOString(),
+      error_message: error?.message,
+    });
+  } catch (telemetryError) {
+    logger.warn(
+      `[telemetry] failed to log failure for job ${job.id}`,
+      telemetryError
+    );
+  }
 });
 
 downloadQueue.on("stalled", (job) => {
@@ -73,13 +177,39 @@ downloadQueue.on("error", (error) => {
   logger.error("Queue error:", error);
 });
 
+const SNAPSHOT_INTERVAL_MS =
+  parseInt(process.env.QUEUE_SNAPSHOT_INTERVAL_MS, 10) || 60000;
+
+async function snapshotQueueMetrics() {
+  try {
+    const stats = await getQueueStats();
+    await telemetryService.recordQueueSnapshot({
+      queue_name: "video-downloads",
+      captured_at: new Date().toISOString(),
+      ...stats,
+    });
+  } catch (error) {
+    logger.debug("Failed to send queue snapshot", error.message);
+  }
+}
+
+if (telemetryService) {
+  setInterval(snapshotQueueMetrics, SNAPSHOT_INTERVAL_MS);
+}
+
 /**
  * Add a download job to the queue
  * @param {Object} params - Download parameters
  * @returns {Promise<Object>} Job information
  */
 async function addDownloadJob(params) {
-  const { url, format = "best", quality = "best" } = params;
+  const {
+    url,
+    format = "best",
+    quality = "best",
+    platform = "unknown",
+    tool = JOB_TOOL_NAME,
+  } = params;
 
   try {
     const job = await downloadQueue.add(
@@ -87,6 +217,8 @@ async function addDownloadJob(params) {
         url,
         format,
         quality,
+        platform,
+        tool,
         timestamp: new Date().toISOString(),
       },
       {
@@ -102,12 +234,23 @@ async function addDownloadJob(params) {
 
     logger.info(`Added download job ${job.id} to queue`);
 
+    await telemetryService.upsertJob({
+      job_id: job.id,
+      tool,
+      platform,
+      status: "queued",
+      format,
+      quality,
+      submitted_at: job.data.timestamp,
+    });
+
     return {
       jobId: job.id,
       status: "queued",
       url,
       format,
       quality,
+      platform,
     };
   } catch (error) {
     logger.error("Failed to add job to queue:", error);
@@ -149,6 +292,7 @@ async function getJobStatus(jobId) {
       url: data.url,
       format: data.format,
       quality: data.quality,
+      platform: data.platform,
       progressMessage: data.progressMessage,
       result,
       error,
@@ -177,7 +321,6 @@ async function cancelJob(jobId) {
 
     const state = await job.getState();
 
-    // Can only cancel jobs that are waiting or active
     if (state === "waiting" || state === "active") {
       await job.remove();
       logger.info(`Cancelled job ${jobId}`);
@@ -206,12 +349,10 @@ async function removeJob(jobId) {
 
     const state = await job.getState();
 
-    // If completed, delete the file
     if (state === "completed" && job.returnvalue?.filepath) {
       downloadService.deleteFile(job.returnvalue.filepath);
     }
 
-    // Remove job from queue
     await job.remove();
     logger.info(`Removed job ${jobId}`);
 
@@ -264,7 +405,6 @@ async function cleanQueue(grace = 3600000) {
   }
 }
 
-// Cleanup old jobs periodically (every hour)
 setInterval(() => {
   cleanQueue();
   downloadService.cleanupOldDownloads();

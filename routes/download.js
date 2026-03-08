@@ -32,15 +32,13 @@ router.post(
         url,
         format,
         quality,
+        platform,
       });
 
       res.status(202).json({
         success: true,
         message: "Download request accepted",
-        data: {
-          ...jobInfo,
-          platform,
-        },
+        data: jobInfo,
       });
     } catch (error) {
       logger.error("Failed to process download request:", error);

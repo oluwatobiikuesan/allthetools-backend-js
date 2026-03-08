@@ -38,4 +38,21 @@ module.exports = {
     level: process.env.LOG_LEVEL || "info",
     dir: path.resolve(process.env.LOG_DIR || "./logs"),
   },
+
+  supabase: {
+    url: process.env.SUPABASE_URL || "",
+    serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    projectRef: process.env.SUPABASE_PROJECT_REF || "",
+    tables: {
+      jobs: process.env.SUPABASE_TABLE_JOBS || "jobs",
+      costLedger: process.env.SUPABASE_TABLE_COST_LEDGER || "cost_ledger",
+      queueMetrics: process.env.SUPABASE_TABLE_QUEUE_METRICS || "queue_metrics",
+    },
+  },
+
+  costs: {
+    egressPerGb: parseFloat(process.env.COST_EGRESS_PER_GB) || 0.05,
+    computePerMinute: parseFloat(process.env.COST_COMPUTE_PER_MINUTE) || 0.02,
+    storagePerGbHour: parseFloat(process.env.COST_STORAGE_PER_GB_HOUR) || 0.0007,
+  },
 };
