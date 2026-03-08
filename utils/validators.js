@@ -1,26 +1,20 @@
 const { body, param, validationResult } = require("express-validator");
 
-/**
- * Detect the platform from a URL
- * @param {string} url - The URL to check
- * @returns {string|null} - Platform name or null if not supported
- */
+const allowedPlans = ["free", "pro", "agency", "enterprise"];
+
 function detectPlatform(url) {
   try {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname.toLowerCase();
 
-    // YouTube
     if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
       return "youtube";
     }
 
-    // TikTok
     if (hostname.includes("tiktok.com")) {
       return "tiktok";
     }
 
-    // Twitch
     if (hostname.includes("twitch.tv")) {
       return "twitch";
     }
@@ -31,18 +25,10 @@ function detectPlatform(url) {
   }
 }
 
-/**
- * Validate if URL is from a supported platform
- * @param {string} url - The URL to validate
- * @returns {boolean}
- */
 function isSupportedPlatform(url) {
   return detectPlatform(url) !== null;
 }
 
-/**
- * Express validator middleware for download request
- */
 const validateDownloadRequest = [
   body("url")
     .trim()
@@ -66,11 +52,22 @@ const validateDownloadRequest = [
     .withMessage(
       "Invalid quality. Allowed: best, worst, 720p, 1080p, 1440p, 2160p"
     ),
+  body("clientId")
+    .optional()
+    .isString()
+    .isLength({ min: 8, max: 64 })
+    .withMessage("clientId must be 8-64 characters"),
+  body("workspaceId")
+    .optional()
+    .isString()
+    .isLength({ min: 8, max: 64 })
+    .withMessage("workspaceId must be 8-64 characters"),
+  body("plan")
+    .optional()
+    .isIn(allowedPlans)
+    .withMessage(`Plan must be one of: ${allowedPlans.join(", ")}`),
 ];
 
-/**
- * Express validator middleware for job ID parameter
- */
 const validateJobId = [
   param("jobId")
     .trim()
@@ -80,9 +77,6 @@ const validateJobId = [
     .withMessage("Invalid job ID format"),
 ];
 
-/**
- * Middleware to handle validation errors
- */
 function handleValidationErrors(req, res, next) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -103,4 +97,5 @@ module.exports = {
   validateDownloadRequest,
   validateJobId,
   handleValidationErrors,
+  allowedPlans,
 };

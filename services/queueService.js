@@ -6,7 +6,6 @@ const telemetryService = require("./telemetryService");
 
 const JOB_TOOL_NAME = "video_downloader";
 
-// Create download queue
 const downloadQueue = new Queue("video-downloads", {
   redis: {
     host: config.redis.host,
@@ -19,7 +18,6 @@ const downloadQueue = new Queue("video-downloads", {
   },
 });
 
-// Configure queue concurrency
 downloadQueue.process(config.download.maxConcurrent, async (job) => {
   const { url, format, quality } = job.data;
 
@@ -50,7 +48,22 @@ downloadQueue.process(config.download.maxConcurrent, async (job) => {
   }
 });
 
-// Queue event handlers
+function baseJobRecord(job) {
+  return {
+    job_id: job.id,
+    tool: job.data.tool || JOB_TOOL_NAME,
+    platform: job.data.platform,
+    client_id: job.data.clientId,
+    workspace_id: job.data.workspaceId,
+    plan: job.data.plan,
+    user_agent: job.data.userAgent,
+    source_ip: job.data.sourceIp,
+    format: job.data.format,
+    quality: job.data.quality,
+    submitted_at: job.data.timestamp,
+  };
+}
+
 downloadQueue.on("active", async (job) => {
   try {
     const startedAt = new Date();
@@ -65,13 +78,8 @@ downloadQueue.on("active", async (job) => {
         : null;
 
     await telemetryService.upsertJob({
-      job_id: job.id,
-      tool: job.data.tool || JOB_TOOL_NAME,
-      platform: job.data.platform,
+      ...baseJobRecord(job),
       status: "active",
-      format: job.data.format,
-      quality: job.data.quality,
-      submitted_at: job.data.timestamp,
       started_at: new Date(job.processedOn || startedAt).toISOString(),
       queue_wait_ms: queueWaitMs,
     });
@@ -106,13 +114,8 @@ downloadQueue.on("completed", async (job, result) => {
       : completedAt.getTime() - processedOn.getTime();
 
     await telemetryService.upsertJob({
-      job_id: job.id,
-      tool: job.data.tool || JOB_TOOL_NAME,
-      platform: job.data.platform,
+      ...baseJobRecord(job),
       status: "completed",
-      format: job.data.format,
-      quality: job.data.quality,
-      submitted_at: job.data.timestamp,
       started_at: processedOn.toISOString(),
       completed_at: completedAt.toISOString(),
       queue_wait_ms: queueWaitMs,
@@ -147,14 +150,10 @@ downloadQueue.on("failed", async (job, error) => {
     const finishedAt = job.finishedOn
       ? new Date(job.finishedOn)
       : new Date();
+
     await telemetryService.upsertJob({
-      job_id: job.id,
-      tool: job.data.tool || JOB_TOOL_NAME,
-      platform: job.data.platform,
+      ...baseJobRecord(job),
       status: "failed",
-      format: job.data.format,
-      quality: job.data.quality,
-      submitted_at: job.data.timestamp,
       started_at: job.processedOn
         ? new Date(job.processedOn).toISOString()
         : null,
@@ -193,15 +192,8 @@ async function snapshotQueueMetrics() {
   }
 }
 
-if (telemetryService) {
-  setInterval(snapshotQueueMetrics, SNAPSHOT_INTERVAL_MS);
-}
+setInterval(snapshotQueueMetrics, SNAPSHOT_INTERVAL_MS);
 
-/**
- * Add a download job to the queue
- * @param {Object} params - Download parameters
- * @returns {Promise<Object>} Job information
- */
 async function addDownloadJob(params) {
   const {
     url,
@@ -209,6 +201,11 @@ async function addDownloadJob(params) {
     quality = "best",
     platform = "unknown",
     tool = JOB_TOOL_NAME,
+    clientId = null,
+    workspaceId = null,
+    plan = "free",
+    userAgent = null,
+    sourceIp = null,
   } = params;
 
   try {
@@ -219,6 +216,11 @@ async function addDownloadJob(params) {
         quality,
         platform,
         tool,
+        clientId,
+        workspaceId,
+        plan,
+        userAgent,
+        sourceIp,
         timestamp: new Date().toISOString(),
       },
       {
@@ -235,13 +237,8 @@ async function addDownloadJob(params) {
     logger.info(`Added download job ${job.id} to queue`);
 
     await telemetryService.upsertJob({
-      job_id: job.id,
-      tool,
-      platform,
+      ...baseJobRecord(job),
       status: "queued",
-      format,
-      quality,
-      submitted_at: job.data.timestamp,
     });
 
     return {
@@ -251,6 +248,7 @@ async function addDownloadJob(params) {
       format,
       quality,
       platform,
+      plan,
     };
   } catch (error) {
     logger.error("Failed to add job to queue:", error);
@@ -258,11 +256,6 @@ async function addDownloadJob(params) {
   }
 }
 
-/**
- * Get job status
- * @param {string} jobId - Job ID
- * @returns {Promise<Object>} Job status
- */
 async function getJobStatus(jobId) {
   try {
     const job = await downloadQueue.getJob(jobId);
@@ -293,6 +286,8 @@ async function getJobStatus(jobId) {
       format: data.format,
       quality: data.quality,
       platform: data.platform,
+      plan: data.plan,
+      clientId: data.clientId,
       progressMessage: data.progressMessage,
       result,
       error,
@@ -306,11 +301,6 @@ async function getJobStatus(jobId) {
   }
 }
 
-/**
- * Cancel a job
- * @param {string} jobId - Job ID
- * @returns {Promise<boolean>} Success status
- */
 async function cancelJob(jobId) {
   try {
     const job = await downloadQueue.getJob(jobId);
@@ -334,11 +324,6 @@ async function cancelJob(jobId) {
   }
 }
 
-/**
- * Remove a job and its downloaded file
- * @param {string} jobId - Job ID
- * @returns {Promise<boolean>} Success status
- */
 async function removeJob(jobId) {
   try {
     const job = await downloadQueue.getJob(jobId);
@@ -363,10 +348,6 @@ async function removeJob(jobId) {
   }
 }
 
-/**
- * Get queue statistics
- * @returns {Promise<Object>} Queue stats
- */
 async function getQueueStats() {
   try {
     const [waiting, active, completed, failed, delayed] = await Promise.all([
@@ -391,10 +372,6 @@ async function getQueueStats() {
   }
 }
 
-/**
- * Clean completed and failed jobs
- * @param {number} grace - Grace period in milliseconds
- */
 async function cleanQueue(grace = 3600000) {
   try {
     await downloadQueue.clean(grace, "completed");

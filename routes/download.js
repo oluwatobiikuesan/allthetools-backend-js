@@ -10,6 +10,7 @@ const {
   validateJobId,
   handleValidationErrors,
   detectPlatform,
+  allowedPlans,
 } = require("../utils/validators");
 
 /**
@@ -22,17 +23,27 @@ router.post(
   handleValidationErrors,
   async (req, res) => {
     try {
-      const { url, format, quality } = req.body;
+      const { url, format, quality, clientId, workspaceId, plan } = req.body;
       const platform = detectPlatform(url);
+      const normalizedPlan = plan && allowedPlans.includes(plan) ? plan : "free";
+      const forwardedFor = req.headers["x-forwarded-for"];
+      const sourceIp = forwardedFor
+        ? forwardedFor.split(",")[0].trim()
+        : req.ip;
+      const userAgent = req.get("user-agent");
 
       logger.info(`New download request for ${platform}: ${url}`);
 
-      // Add job to queue
       const jobInfo = await queueService.addDownloadJob({
         url,
         format,
         quality,
         platform,
+        clientId,
+        workspaceId,
+        plan: normalizedPlan,
+        userAgent,
+        sourceIp,
       });
 
       res.status(202).json({
