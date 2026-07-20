@@ -131,7 +131,7 @@ router.get(
 
       logger.info(`Serving file for job ${jobId}: ${filename}`);
 
-      res.download(filepath, filename, (err) => {
+      res.download(filepath, filename, async (err) => {
         if (err) {
           logger.error("Error sending file:", err);
           if (!res.headersSent) {
@@ -139,6 +139,18 @@ router.get(
               success: false,
               error: "Failed to send file",
             });
+          }
+        } else {
+          logger.info(`File sent successfully: ${filename}`);
+
+          // Delete file and remove job to save space
+          try {
+            // We can use queueService.removeJob which handles both file deletion and job removal
+            // But since we just sent the file, we might want to be explicit or use the existing helper
+            await queueService.removeJob(jobId);
+            logger.info(`Auto-deleted job and file for ${jobId}`);
+          } catch (cleanupError) {
+            logger.error(`Failed to auto-delete job ${jobId}:`, cleanupError);
           }
         }
       });
