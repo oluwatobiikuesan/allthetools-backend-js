@@ -33,6 +33,11 @@ module.exports = {
       noPlaylist: true,
       noCheckCertificates: false,
       preferFreeFormats: false,
+      // yt-dlp 2026.7+ requires a JS runtime to parse YouTube's nsig
+      // challenge. The Docker image ships Node.js, so we tell yt-dlp to
+      // use it. Without this, YouTube returns "Sign in to confirm you're
+      // not a bot" even when valid cookies are provided.
+      jsRuntimes: "node",
       // NOTE: Do NOT set extractorArgs or userAgent here.
       // The previous `youtube:player_client=android,web` + hardcoded
       // Chrome 120 user-agent caused "Sign in to confirm you're not a bot"

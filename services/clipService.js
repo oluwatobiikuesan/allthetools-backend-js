@@ -61,6 +61,10 @@ class ClipService {
 
     if (platform === "youtube" && fs.existsSync(config.ytdlp.cookiesPath)) {
       args.push("--cookies", config.ytdlp.cookiesPath);
+      // JS runtime — yt-dlp 2026.7+ needs this for YouTube nsig parsing
+      if (config.ytdlp.defaultOptions.jsRuntimes) {
+        args.push("--js-runtimes", config.ytdlp.defaultOptions.jsRuntimes);
+      }
       if (config.ytdlp.defaultOptions.extractorArgs) {
         args.push(
           "--extractor-args",
@@ -126,6 +130,9 @@ class ClipService {
 
     if (platform === "youtube" && fs.existsSync(config.ytdlp.cookiesPath)) {
       args.push("--cookies", config.ytdlp.cookiesPath);
+      if (config.ytdlp.defaultOptions.jsRuntimes) {
+        args.push("--js-runtimes", config.ytdlp.defaultOptions.jsRuntimes);
+      }
       if (config.ytdlp.defaultOptions.extractorArgs) {
         args.push(
           "--extractor-args",

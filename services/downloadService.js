@@ -86,7 +86,12 @@ class DownloadService {
       if (platform === "youtube" && fs.existsSync(config.ytdlp.cookiesPath)) {
         args.push("--cookies", config.ytdlp.cookiesPath);
 
-        // Anti-bot arguments from config
+        // JS runtime — yt-dlp 2026.7+ needs this for YouTube nsig parsing
+        if (config.ytdlp.defaultOptions.jsRuntimes) {
+          args.push("--js-runtimes", config.ytdlp.defaultOptions.jsRuntimes);
+        }
+
+        // Anti-bot arguments from config (currently none — see config.js comment)
         if (config.ytdlp.defaultOptions.extractorArgs) {
           args.push(
             "--extractor-args",
