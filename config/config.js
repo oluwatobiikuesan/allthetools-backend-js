@@ -39,6 +39,13 @@ module.exports = {
       // "Sign in to confirm you're not a bot" even with valid cookies.
       remoteComponents: "ejs:github",
     },
+    // Optional HTTP proxy for yt-dlp requests. Set YTDLP_PROXY env var
+    // to route YouTube requests through a proxy (e.g. a residential
+    // proxy) so YouTube doesn't flag datacenter IPs as bots.
+    // Format: "http://user:pass@host:port" or "socks5://host:port"
+    proxy: process.env.YTDLP_PROXY && process.env.YTDLP_PROXY.trim() !== ""
+      ? process.env.YTDLP_PROXY
+      : undefined,
     // Path to global cookies file for YouTube authentication
     cookiesPath: path.resolve(
       process.env.YOUTUBE_COOKIES_PATH || "./cookies/youtube.txt",

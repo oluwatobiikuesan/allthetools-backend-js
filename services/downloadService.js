@@ -82,19 +82,22 @@ class DownloadService {
       const platform = detectPlatform(url);
       const args = [];
 
-      // YouTube-specific args: cookies + JS runtime + PO Token client + EJS solver
+      // YouTube-specific args: cookies + JS runtime + EJS solver + proxy
       if (platform === "youtube") {
         if (fs.existsSync(config.ytdlp.cookiesPath)) {
           args.push("--cookies", config.ytdlp.cookiesPath);
+        }
+        if (config.ytdlp.defaultOptions.remoteComponents) {
+          args.push("--remote-components", config.ytdlp.defaultOptions.remoteComponents);
+        }
+        if (config.ytdlp.proxy) {
+          args.push("--proxy", config.ytdlp.proxy);
         }
         if (config.ytdlp.defaultOptions.jsRuntimes) {
           args.push("--js-runtimes", config.ytdlp.defaultOptions.jsRuntimes);
         }
         if (config.ytdlp.defaultOptions.extractorArgs) {
           args.push("--extractor-args", config.ytdlp.defaultOptions.extractorArgs);
-        }
-        if (config.ytdlp.defaultOptions.remoteComponents) {
-          args.push("--remote-components", config.ytdlp.defaultOptions.remoteComponents);
         }
         if (config.ytdlp.defaultOptions.userAgent) {
           args.push("--user-agent", config.ytdlp.defaultOptions.userAgent);
