@@ -33,11 +33,12 @@ module.exports = {
       noPlaylist: true,
       noCheckCertificates: false,
       preferFreeFormats: false,
-      // Add options to work around YouTube 403 errors
-      extractorArgs: "youtube:player_client=android,web",
-      // Add user agent to avoid blocking
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      // NOTE: Do NOT set extractorArgs or userAgent here.
+      // The previous `youtube:player_client=android,web` + hardcoded
+      // Chrome 120 user-agent caused "Sign in to confirm you're not a bot"
+      // errors because YouTube's SABR experiment broke the android client
+      // and the stale user-agent triggered bot detection.
+      // yt-dlp's built-in defaults work correctly with the cookies file.
     },
     // Path to global cookies file for YouTube authentication
     cookiesPath: path.resolve(

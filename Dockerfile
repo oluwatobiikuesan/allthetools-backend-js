@@ -6,8 +6,8 @@ RUN apk add --no-cache \
     py3-pip \
     ffmpeg
 
-# Install yt-dlp using pip and ensure it's accessible
-RUN python3 -m pip install --break-system-packages --no-cache-dir yt-dlp && \
+# Install yt-dlp using pip (pin to latest stable for YouTube compatibility)
+RUN python3 -m pip install --break-system-packages --no-cache-dir "yt-dlp>=2026.7" && \
     YTDLP_LOCATION=$(which yt-dlp) && \
     echo "yt-dlp installed at: $YTDLP_LOCATION" && \
     if [ "$YTDLP_LOCATION" != "/usr/local/bin/yt-dlp" ]; then \
