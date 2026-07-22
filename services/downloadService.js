@@ -82,21 +82,19 @@ class DownloadService {
       const platform = detectPlatform(url);
       const args = [];
 
-      // Use cookies for YouTube if the file exists
-      if (platform === "youtube" && fs.existsSync(config.ytdlp.cookiesPath)) {
-        args.push("--cookies", config.ytdlp.cookiesPath);
-
-        // JS runtime — yt-dlp 2026.7+ needs this for YouTube nsig parsing
+      // YouTube-specific args: cookies + JS runtime + PO Token client + EJS solver
+      if (platform === "youtube") {
+        if (fs.existsSync(config.ytdlp.cookiesPath)) {
+          args.push("--cookies", config.ytdlp.cookiesPath);
+        }
         if (config.ytdlp.defaultOptions.jsRuntimes) {
           args.push("--js-runtimes", config.ytdlp.defaultOptions.jsRuntimes);
         }
-
-        // Anti-bot arguments from config (currently none — see config.js comment)
         if (config.ytdlp.defaultOptions.extractorArgs) {
-          args.push(
-            "--extractor-args",
-            config.ytdlp.defaultOptions.extractorArgs,
-          );
+          args.push("--extractor-args", config.ytdlp.defaultOptions.extractorArgs);
+        }
+        if (config.ytdlp.defaultOptions.remoteComponents) {
+          args.push("--remote-components", config.ytdlp.defaultOptions.remoteComponents);
         }
         if (config.ytdlp.defaultOptions.userAgent) {
           args.push("--user-agent", config.ytdlp.defaultOptions.userAgent);

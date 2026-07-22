@@ -38,6 +38,15 @@ module.exports = {
       // Deno is installed in the Dockerfile. Without this, YouTube returns
       // "Sign in to confirm you're not a bot" even with valid cookies.
       jsRuntimes: "deno",
+      // Use the mweb client which works with PO Tokens (auto-generated
+      // by the bgutil-ytdlp-pot-provider plugin). This client is the
+      // yt-dlp maintainers' recommended fix for the "Sign in to confirm
+      // you're not a bot" error on datacenter IPs.
+      extractorArgs: "youtube:player_client=mweb",
+      // Enable remote EJS challenge solver (needed for nsig/signature
+      // solving with the mweb client). Downloads the solver script
+      // from GitHub on first use.
+      remoteComponents: "ejs:github",
       // NOTE: Do NOT set extractorArgs or userAgent here.
       // The previous `youtube:player_client=android,web` + hardcoded
       // Chrome 120 user-agent caused "Sign in to confirm you're not a bot"
