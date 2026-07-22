@@ -12,12 +12,14 @@ FROM node:18
 # Copy the Deno binary from the official image
 COPY --from=deno-source /usr/bin/deno /usr/local/bin/deno
 
-# Install Python, ffmpeg, and dependencies for yt-dlp
+# Install Python, ffmpeg, git (for cloning pot-server), curl, and deps
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
         ffmpeg \
+        git \
+        curl \
     && rm -rf /var/lib/apt/lists/* && \
     deno --version
 
