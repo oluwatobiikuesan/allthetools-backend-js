@@ -9,16 +9,6 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
 
-  # PO Token provider — generates YouTube PO Tokens to bypass
-  # "Sign in to confirm you're not a bot" on datacenter IPs.
-  # yt-dlp's bgutil plugin connects to this server on port 4416.
-  pot-provider:
-    image: brainicism/bgutil-ytdlp-pot-provider:deno
-    container_name: video-downloader-pot-provider
-    ports:
-      - "4416:4416"
-    restart: unless-stopped
-
   app:
     build: .
     container_name: video-downloader-app
@@ -32,8 +22,6 @@ services:
       - DOWNLOAD_DIR=/app/downloads
       - YTDLP_PATH=/usr/local/bin/yt-dlp
       - YOUTUBE_COOKIES_PATH=/app/cookies/youtube.txt
-      # PO Token provider URL (bgutil plugin reads this)
-      - BGUTIL_POT_BASE_URL=http://pot-provider:4416
     volumes:
       - ./downloads:/app/downloads
       - ./logs:/app/logs
@@ -43,7 +31,6 @@ services:
       - /app/bin
     depends_on:
       - redis
-      - pot-provider
     restart: unless-stopped
 
 volumes:
