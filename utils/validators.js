@@ -81,6 +81,45 @@ const validateDownloadRequest = [
 ];
 
 /**
+ * Express validator middleware for clip request
+ * Validates url + clip range. clipEnd must be > clipStart.
+ */
+const validateClipRequest = [
+  body("url")
+    .trim()
+    .notEmpty()
+    .withMessage("URL is required")
+    .isURL({ protocols: ["http", "https"] })
+    .withMessage("Invalid URL format")
+    .custom((value) => {
+      if (!isSupportedPlatform(value)) {
+        throw new Error(
+          "URL must be from YouTube, TikTok, Twitch, Instagram, or Twitter",
+        );
+      }
+      return true;
+    }),
+  body("clipStart")
+    .notEmpty()
+    .withMessage("clipStart is required")
+    .isFloat({ min: 0 })
+    .withMessage("clipStart must be a non-negative number (seconds)"),
+  body("clipEnd")
+    .notEmpty()
+    .withMessage("clipEnd is required")
+    .isFloat({ min: 0 })
+    .withMessage("clipEnd must be a non-negative number (seconds)")
+    .custom((end, { req }) => {
+      const start = parseFloat(req.body.clipStart);
+      const endNum = parseFloat(end);
+      if (!isNaN(start) && !isNaN(endNum) && endNum <= start) {
+        throw new Error("clipEnd must be greater than clipStart");
+      }
+      return true;
+    }),
+];
+
+/**
  * Express validator middleware for job ID parameter
  */
 const validateJobId = [
@@ -113,6 +152,7 @@ module.exports = {
   detectPlatform,
   isSupportedPlatform,
   validateDownloadRequest,
+  validateClipRequest,
   validateJobId,
   handleValidationErrors,
 };

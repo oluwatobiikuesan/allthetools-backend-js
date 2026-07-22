@@ -2,6 +2,7 @@ const Queue = require("bull");
 const config = require("../config/config");
 const logger = require("../utils/logger");
 const downloadService = require("./downloadService");
+const clipService = require("./clipService");
 
 // Create download queue
 const downloadQueue = new Queue("video-downloads", {
@@ -264,10 +265,239 @@ async function cleanQueue(grace = 3600000) {
   }
 }
 
+// ============================================================
+// Clip queue — separate Bull queue for clip/segment extraction
+// (yt-dlp -g + ffmpeg -ss/-to slicing). See services/clipService.js
+// ============================================================
+const clipQueue = new Queue("video-clips", {
+  redis: {
+    host: config.redis.host,
+    port: config.redis.port,
+    password: config.redis.password,
+  },
+  settings: {
+    maxStalledCount: 1,
+    stalledInterval: 30000,
+  },
+});
+
+clipQueue.process(config.download.maxConcurrent, async (job) => {
+  const { url, clipStart, clipEnd } = job.data;
+
+  logger.info(`Processing clip job ${job.id} for URL: ${url}`);
+
+  try {
+    await job.progress(0);
+
+    const result = await clipService.createClip(
+      { url, clipStart, clipEnd },
+      async (progressData) => {
+        await job.progress(progressData.progress);
+        await job.update({
+          ...job.data,
+          progressMessage: progressData.message || "Processing clip",
+        });
+      },
+    );
+
+    await job.progress(100);
+    logger.info(`Clip job ${job.id} completed successfully`);
+    return result;
+  } catch (error) {
+    logger.error(`Clip job ${job.id} failed:`, error);
+    throw error;
+  }
+});
+
+clipQueue.on("completed", (job, result) => {
+  logger.info(`Clip job ${job.id} completed with result:`, {
+    filename: result.filename,
+    filesize: result.filesize,
+  });
+});
+
+clipQueue.on("failed", (job, error) => {
+  logger.error(`Clip job ${job.id} failed:`, error.message);
+});
+
+clipQueue.on("stalled", (job) => {
+  logger.warn(`Clip job ${job.id} stalled`);
+});
+
+clipQueue.on("error", (error) => {
+  logger.error("Clip queue error:", error);
+});
+
+/**
+ * Add a clip job to the queue
+ * @param {Object} params - { url, clipStart, clipEnd }
+ * @returns {Promise<Object>} Job information
+ */
+async function addClipJob(params) {
+  const { url, clipStart, clipEnd } = params;
+
+  try {
+    const job = await clipQueue.add(
+      {
+        url,
+        clipStart,
+        clipEnd,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        attempts: 2,
+        backoff: { type: "exponential", delay: 5000 },
+        removeOnComplete: false,
+        removeOnFail: false,
+      },
+    );
+
+    logger.info(`Added clip job ${job.id} to queue`);
+    return {
+      jobId: job.id,
+      status: "queued",
+      url,
+      clipStart,
+      clipEnd,
+    };
+  } catch (error) {
+    logger.error("Failed to add clip job to queue:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get clip job status
+ * @param {string} jobId
+ * @returns {Promise<Object|null>}
+ */
+async function getClipStatus(jobId) {
+  try {
+    const job = await clipQueue.getJob(jobId);
+    if (!job) return null;
+
+    const state = await job.getState();
+    const progress = job._progress;
+    const data = job.data;
+
+    let result = null;
+    if (state === "completed") result = job.returnvalue;
+
+    let error = null;
+    if (state === "failed") error = job.failedReason;
+
+    return {
+      jobId: job.id,
+      status: state,
+      progress,
+      url: data.url,
+      clipStart: data.clipStart,
+      clipEnd: data.clipEnd,
+      progressMessage: data.progressMessage,
+      result,
+      error,
+      createdAt: data.timestamp,
+      processedOn: job.processedOn,
+      finishedOn: job.finishedOn,
+    };
+  } catch (error) {
+    logger.error(`Failed to get clip status for ${jobId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Cancel a clip job
+ * @param {string} jobId
+ * @returns {Promise<boolean>}
+ */
+async function cancelClipJob(jobId) {
+  try {
+    const job = await clipQueue.getJob(jobId);
+    if (!job) return false;
+    const state = await job.getState();
+    if (state === "waiting" || state === "active") {
+      await job.remove();
+      logger.info(`Cancelled clip job ${jobId}`);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    logger.error(`Failed to cancel clip job ${jobId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Remove a clip job and its output file
+ * @param {string} jobId
+ * @returns {Promise<boolean>}
+ */
+async function removeClipJob(jobId) {
+  try {
+    const job = await clipQueue.getJob(jobId);
+    if (!job) return false;
+
+    const state = await job.getState();
+    if (state === "completed" && job.returnvalue?.filepath) {
+      clipService.deleteFile(job.returnvalue.filepath);
+    }
+    await job.remove();
+    logger.info(`Removed clip job ${jobId}`);
+    return true;
+  } catch (error) {
+    logger.error(`Failed to remove clip job ${jobId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get clip queue statistics
+ * @returns {Promise<Object>}
+ */
+async function getClipQueueStats() {
+  try {
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      clipQueue.getWaitingCount(),
+      clipQueue.getActiveCount(),
+      clipQueue.getCompletedCount(),
+      clipQueue.getFailedCount(),
+      clipQueue.getDelayedCount(),
+    ]);
+    return {
+      waiting,
+      active,
+      completed,
+      failed,
+      delayed,
+      total: waiting + active + completed + failed + delayed,
+    };
+  } catch (error) {
+    logger.error("Failed to get clip queue stats:", error);
+    throw error;
+  }
+}
+
+/**
+ * Clean completed and failed clip jobs
+ * @param {number} grace - Grace period in ms
+ */
+async function cleanClipQueue(grace = 3600000) {
+  try {
+    await clipQueue.clean(grace, "completed");
+    await clipQueue.clean(grace, "failed");
+    logger.info("Clip queue cleaned successfully");
+  } catch (error) {
+    logger.error("Failed to clean clip queue:", error);
+  }
+}
+
 // Cleanup old jobs periodically (every hour)
 setInterval(() => {
   cleanQueue();
+  cleanClipQueue();
   downloadService.cleanupOldDownloads();
+  clipService.cleanupOldClips();
 }, 3600000);
 
 module.exports = {
@@ -278,4 +508,11 @@ module.exports = {
   removeJob,
   getQueueStats,
   cleanQueue,
+  clipQueue,
+  addClipJob,
+  getClipStatus,
+  cancelClipJob,
+  removeClipJob,
+  getClipQueueStats,
+  cleanClipQueue,
 };

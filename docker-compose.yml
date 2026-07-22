@@ -16,6 +16,7 @@ services:
       - "3005:3005"
     environment:
       - NODE_ENV=production
+      - PORT=3005
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DOWNLOAD_DIR=/app/downloads

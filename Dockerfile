@@ -34,5 +34,8 @@ COPY ./cookies/youtube.txt ./cookies/youtube.txt
 # Expose port
 EXPOSE 3005
 
+# Default port for the app (overridable via env at runtime)
+ENV PORT=3005
+
 # Start the application (yt-dlp already installed via pip)
 CMD ["node", "server.js"]

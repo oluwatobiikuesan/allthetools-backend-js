@@ -5,6 +5,7 @@ const logger = require("./utils/logger");
 
 // Import routes
 const downloadRoutes = require("./routes/download");
+const clipRoutes = require("./routes/clip");
 const convertRoutes = require("./routes/convert");
 const convertUrlRoutes = require("./routes/convert-url");
 const enhanceRoutes = require("./routes/enhance");
@@ -29,6 +30,7 @@ app.use((req, res, next) => {
 // Routes
 app.use("/api/health", healthRoutes);
 app.use("/api/download", downloadRoutes);
+app.use("/api/clip", clipRoutes);
 app.use("/api/convert", convertRoutes);
 app.use("/api/convert-url", convertUrlRoutes);
 app.use("/api/enhance", enhanceRoutes);
@@ -49,6 +51,15 @@ app.get("/", (req, res) => {
         cancel: "DELETE /api/download/:jobId",
         info: "GET /api/download/info/video?url=<video_url>",
         stats: "GET /api/download/stats/queue",
+      },
+      clip: {
+        submit: "POST /api/clip",
+        body: "{ url, clipStart, clipEnd } (seconds)",
+        status: "GET /api/clip/:jobId",
+        file: "GET /api/clip/:jobId/file",
+        cancel: "DELETE /api/clip/:jobId",
+        info: "GET /api/clip/info/video?url=<video_url>",
+        stats: "GET /api/clip/stats/queue",
       },
       convert: {
         submit: "POST /api/convert (multipart/form-data)",
