@@ -33,6 +33,11 @@ module.exports = {
       noPlaylist: true,
       noCheckCertificates: false,
       preferFreeFormats: false,
+      // Download the EJS challenge solver script from GitHub on first
+      // use. yt-dlp 2026.7+ requires this to solve YouTube's nsig/
+      // signature challenges via Deno. Without it, YouTube returns
+      // "Sign in to confirm you're not a bot" even with valid cookies.
+      remoteComponents: "ejs:github",
     },
     // Path to global cookies file for YouTube authentication
     cookiesPath: path.resolve(
