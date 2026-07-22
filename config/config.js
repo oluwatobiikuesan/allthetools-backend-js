@@ -42,7 +42,9 @@ module.exports = {
       // by the bgutil-ytdlp-pot-provider plugin). This client is the
       // yt-dlp maintainers' recommended fix for the "Sign in to confirm
       // you're not a bot" error on datacenter IPs.
-      extractorArgs: "youtube:player_client=mweb",
+      // Also set the PO Token server base URL explicitly (the plugin
+      // defaults to http://127.0.0.1:4416 which works in-container).
+      extractorArgs: "youtube:player_client=mweb;youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416",
       // Enable remote EJS challenge solver (needed for nsig/signature
       // solving with the mweb client). Downloads the solver script
       // from GitHub on first use.

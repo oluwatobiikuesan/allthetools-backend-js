@@ -9,7 +9,7 @@ set -e
 # Start the PO Token server in the background
 echo "Starting bgutil PO Token server on port 4416..."
 cd /opt/pot-server/server
-deno run --allow-net --allow-env --allow-read --allow-write --allow-ffi mod.ts &
+deno run --allow-net --allow-env --allow-read --allow-write --allow-ffi src/main.ts &
 POT_PID=$!
 echo "PO Token server started (PID $POT_PID)"
 
